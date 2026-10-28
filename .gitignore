@@ -49,6 +49,8 @@ android/key.properties
 *.jks
 *.keystore
 android/local.properties
+android/RELEASE-KEYSTORE.txt
+android/.keystore-pass.tmp
 
 # Local secrets / scratch output
 supabase creds.txt
