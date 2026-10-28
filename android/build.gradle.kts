@@ -15,22 +15,27 @@ subprojects {
     val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
-subprojects {
-    project.evaluationDependsOn(":app")
-}
-
 // Some plugins (file_picker 8.x among them) still pin their own compileSdk 34,
 // while current AndroidX artifacts such as flutter_plugin_android_lifecycle
 // require 36. Compile every Android library module against the SDK the app uses
-// so the release AAR metadata check passes.
+// so the release AAR metadata check passes. Registered before the
+// evaluationDependsOn(":app") block below, which evaluates :app early.
 subprojects {
-    afterEvaluate {
-        val androidExtension =
-            extensions.findByType(com.android.build.api.dsl.LibraryExtension::class.java)
-        if (androidExtension != null) {
-            androidExtension.compileSdk = 36
+    val useAppCompileSdk: () -> Unit = {
+        val library = extensions.findByType(com.android.build.api.dsl.LibraryExtension::class.java)
+        if (library != null) {
+            library.compileSdk = 36
         }
     }
+    if (state.executed) {
+        useAppCompileSdk()
+    } else {
+        afterEvaluate { useAppCompileSdk() }
+    }
+}
+
+subprojects {
+    project.evaluationDependsOn(":app")
 }
 
 tasks.register<Delete>("clean") {
