@@ -1,0 +1,6 @@
+# Copy to android/key.properties (git-ignored) and fill in.
+# Used by android/app/build.gradle.kts for the release signing config.
+storePassword=change-me
+keyPassword=change-me
+keyAlias=adoetz
+storeFile=upload-keystore.jks

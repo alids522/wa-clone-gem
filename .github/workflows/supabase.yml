@@ -1,0 +1,70 @@
+name: Supabase deploy
+
+# Manual only: production deploys stay a deliberate act.
+# Repository secrets:
+#   SUPABASE_ACCESS_TOKEN   personal access token (sbp_...)
+#   SUPABASE_PROJECT_REF    project ref (not a URL)
+#   SUPABASE_DB_PASSWORD    database password, used by `supabase db push`
+
+on:
+  workflow_dispatch:
+    inputs:
+      push_migrations:
+        description: 'Apply pending migrations to the linked project'
+        type: boolean
+        default: true
+      deploy_functions:
+        description: 'Deploy the Edge Functions'
+        type: boolean
+        default: true
+
+concurrency:
+  group: supabase-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check configuration
+        id: check
+        env:
+          TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          if [ -z "$TOKEN" ] || [ -z "$REF" ]; then
+            echo "::error::Set SUPABASE_ACCESS_TOKEN and SUPABASE_PROJECT_REF to deploy."
+            exit 1
+          fi
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link project
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase link --project-ref "${{ steps.check.outputs.ref }}"
+
+      - name: Push migrations
+        if: inputs.push_migrations
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: supabase db push
+
+      - name: Deploy functions
+        if: inputs.deploy_functions
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          supabase functions deploy redeem-invite-register --no-verify-jwt
+          supabase functions deploy login-identifier --no-verify-jwt
+          supabase functions deploy username-availability --no-verify-jwt
+          supabase functions deploy dispatch-push --no-verify-jwt

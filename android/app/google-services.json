@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "545568561375",
+    "project_id": "wa-clone-gpt",
+    "storage_bucket": "wa-clone-gpt.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:545568561375:android:4a01c07609cf9163d9f16a",
+        "android_client_info": {
+          "package_name": "com.adoetzchat.messenger"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAceNYT1NfrSJbCO2Jcz3k1lfF0ckeiHUY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:545568561375:android:c0b8f74d8a2cc190d9f16a",
+        "android_client_info": {
+          "package_name": "com.adoetzchat2.gemini"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAceNYT1NfrSJbCO2Jcz3k1lfF0ckeiHUY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

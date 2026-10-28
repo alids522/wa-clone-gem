@@ -1,0 +1,43 @@
+# Adoetz Chat - Supabase project configuration.
+#
+# Only the settings this project actually depends on are pinned here; the CLI
+# fills the rest with its defaults.
+
+project_id = "adoetz-chat"
+
+[api]
+enabled = true
+max_rows = 1000
+
+[db]
+port = 54322
+
+[auth]
+enabled = true
+# Invite-only: sign-ups go through the redeem-invite-register Edge Function,
+# which creates the user with the service role.
+enable_signup = false
+enable_confirmations = false
+minimum_password_length = 12
+
+[auth.email]
+enable_signup = false
+enable_confirmations = false
+
+[storage]
+enabled = true
+# Attachments bucket allows 200 MB in the migration; keep the project limit
+# from silently overriding it downwards.
+file_size_limit = "200MiB"
+
+[functions.redeem-invite-register]
+verify_jwt = false
+
+[functions.login-identifier]
+verify_jwt = false
+
+[functions.username-availability]
+verify_jwt = false
+
+[functions.dispatch-push]
+verify_jwt = false
