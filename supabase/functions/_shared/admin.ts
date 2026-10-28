@@ -11,9 +11,14 @@ function required(name: string): string {
   return value;
 }
 
+/// This deployment keeps the app's tables out of `public`, which the instance
+/// shares with another application.
+const dbSchema = Deno.env.get('ADOETZ_DB_SCHEMA') ?? 'waclonegem';
+
 export function adminClient(): SupabaseClient {
   return createClient(required('SUPABASE_URL'), required('SUPABASE_SERVICE_ROLE_KEY'), {
     auth: { autoRefreshToken: false, persistSession: false },
+    db: { schema: dbSchema },
   });
 }
 
@@ -21,5 +26,6 @@ export function adminClient(): SupabaseClient {
 export function anonClient(): SupabaseClient {
   return createClient(required('SUPABASE_URL'), required('SUPABASE_ANON_KEY'), {
     auth: { autoRefreshToken: false, persistSession: false },
+    db: { schema: dbSchema },
   });
 }

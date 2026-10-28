@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../config/env.dart';
 import '../models/profile.dart';
 import '../utils/app_error.dart';
 
@@ -36,7 +37,7 @@ class AuthRepository {
     }
 
     final response = await _client.functions.invoke(
-      'login-identifier',
+      Env.loginFunction,
       body: {'identifier': trimmed.toLowerCase(), 'password': password},
     );
     final data = _asMap(response.data);
@@ -59,7 +60,7 @@ class AuthRepository {
     required String displayName,
   }) async {
     final response = await _client.functions.invoke(
-      'redeem-invite-register',
+      Env.registerFunction,
       body: {
         'invite_code': inviteCode.trim(),
         'username': username.trim().toLowerCase(),
@@ -93,7 +94,7 @@ class AuthRepository {
   Future<bool?> usernameAvailable(String username) async {
     try {
       final response = await _client.functions.invoke(
-        'username-availability',
+        Env.usernameCheckFunction,
         body: {'username': username},
       );
       final data = _asMap(response.data);

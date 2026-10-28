@@ -123,15 +123,47 @@ class CallSession extends ChangeNotifier {
 
   // --- WebRTC ---------------------------------------------------------------
 
+  /// Relay entry for the ICE list, or null when TURN is not reachable.
+  ///
+  /// Credentials are minted per call by the Edge Function, so the APK never
+  /// carries a long-lived TURN password. A build with static defines keeps
+  /// using those instead.
+  Future<Map<String, dynamic>?> _turnServer() async {
+    if (!Env.hasTurn) return null;
+    if (Env.staticTurnCredentials) {
+      return {
+        'urls': Env.turnUrl,
+        'username': Env.turnUsername,
+        'credential': Env.turnCredential,
+      };
+    }
+    try {
+      final response = await _client.functions
+          .invoke(Env.turnCredentialFunction)
+          .timeout(const Duration(seconds: 5));
+      final data = response.data;
+      if (data is! Map) return null;
+      final username = data['username'];
+      final credential = data['credential'];
+      if (username is! String || credential is! String) return null;
+      final urls = data['urls'];
+      return {
+        'urls': urls is List ? urls.whereType<String>().toList() : Env.turnUrl,
+        'username': username,
+        'credential': credential,
+      };
+    } catch (error) {
+      // STUN still connects on most networks; never block the call on this.
+      debugPrint('TURN credentials unavailable: $error');
+      return null;
+    }
+  }
+
   Future<void> _preparePeer() async {
+    final turn = await _turnServer();
     final iceServers = <Map<String, dynamic>>[
       {'urls': Env.stunUrl},
-      if (Env.hasTurn)
-        {
-          'urls': Env.turnUrl,
-          'username': Env.turnUsername,
-          'credential': Env.turnCredential,
-        },
+      ?turn,
     ];
     final pc = await createPeerConnection({
       'iceServers': iceServers,

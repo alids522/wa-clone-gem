@@ -11,7 +11,11 @@ export interface ServiceAccount {
 }
 
 export function serviceAccount(): ServiceAccount | null {
-  const raw = Deno.env.get('FIREBASE_SERVICE_ACCOUNT');
+  // Self-hosted runtimes often inject the JSON base64-encoded to survive env
+  // parsing, so accept either form.
+  const encoded = Deno.env.get('FIREBASE_SERVICE_ACCOUNT_B64');
+  const raw = Deno.env.get('FIREBASE_SERVICE_ACCOUNT') ??
+    (encoded ? new TextDecoder().decode(Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0))) : '');
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as Partial<ServiceAccount>;

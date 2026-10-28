@@ -190,3 +190,51 @@ attaches the APK and `SHA256SUMS.txt` to the GitHub Release.
 8. Start an audio call, answer, hang up; verify history on both devices.
 9. Suspend the account from the admin panel; the app should show the blocked
    screen on next foreground.
+
+## 12. Running next to another application
+
+The production instance (`supabase.adoetz52.my.id`) already hosts another app in
+`public`, so this deployment isolates everything it can:
+
+| Thing | Where |
+|---|---|
+| Tables, RPCs | schema `waclonegem`, helpers in `waclonegem_private` |
+| PostgREST | `PGRST_DB_SCHEMAS` includes `waclonegem`; the app pins it with `PostgrestClientOptions(schema: Env.dbSchema)` |
+| Edge Functions | `adoetz-login`, `adoetz-register`, `adoetz-username`, `adoetz-push`, `adoetz-turn` |
+| Storage | `avatars`, `attachments` (global by nature, but policies are app-specific) |
+
+Migrations stay the source of truth in `public`/`private`; the SQL applied to
+this instance is generated:
+
+```bash
+bash supabase/scripts/to-schema.sh waclonegem build/sql-waclonegem
+for f in build/sql-waclonegem/*.sql; do
+  psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f "$f"
+done
+```
+
+The generated `zz-role-grants.sql` mirrors the API-role grants Supabase normally
+gives `public`, and drops the invite-only trigger the migrations put on
+`auth.users` — `auth.users` is shared, and that trigger would reject the other
+app's sign-ups. Registration stays invite-only because `adoetz-register` and
+`finalize_registration` are the only paths into the app.
+
+The other app installs its own `private.on_signup` trigger that rejects any
+user without its `invite_code` marker. Adoetz Chat users are recognised by the
+invite reservation `redeem_invite_token` writes just before `createUser`, so a
+one-time shim lets them through:
+
+```sql
+-- see the deployment notes; the check is
+--   exists (select 1 from waclonegem_private.invite_reservations r
+--            where r.email = new.email and r.created_at > now() - interval '1 hour')
+```
+
+### TURN
+
+coturn (`adoetz-turn`) runs with `static-auth-secret`, so the APK carries no TURN
+password. `adoetz-turn` mints `<expiry>:<user id>` / base64(HMAC-SHA1) pairs for
+signed-in users; the client asks for one before each call and falls back to
+`--dart-define=TURN_USERNAME/TURN_CREDENTIAL` only when those are supplied
+explicitly. The coturn secret lives in the functions runtime
+(`ADOETZ_TURN_CONFIG_B64`), never in the app.

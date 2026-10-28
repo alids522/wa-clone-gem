@@ -55,6 +55,10 @@ class AppDependencies {
     await Supabase.initialize(
       url: Env.supabaseUrl,
       anonKey: Env.supabaseAnonKey,
+      // The instance hosts another application in `public`, so this app keeps
+      // all of its tables in its own schema. PostgREST selects it per request
+      // through these headers.
+      postgrestOptions: const PostgrestClientOptions(schema: Env.dbSchema),
     );
     final client = Supabase.instance.client;
 
