@@ -30,6 +30,7 @@ Four migrations run in order:
 | `20261028090100_functions.sql` | RPCs (chat, calls, admin, invites), push enqueue triggers, rate limits |
 | `20261028090200_push_dispatch.sql` | `claim_outbound_jobs` / `complete_outbound_job` for the dispatcher |
 | `20261028090300_reactions_reports.sql` | message reactions, user reports, report review RPCs, realtime publication entry |
+| `20261028090400_group_push.sql` | pushes a new message to every active member of the conversation, not just one peer |
 
 The buckets `avatars` and `attachments` are created with their policies; sizes
 are capped at 5 MB and 200 MB respectively — adjust the migration if you need
@@ -113,6 +114,47 @@ The dispatcher claims up to 50 due jobs per run, sends them through FCM HTTP
 v1, retries failures with exponential backoff (30 s → 15 min, 5 attempts), and
 revokes tokens FCM reports as unregistered. Jobs for users whose notification
 privacy is `none` are never queued.
+
+Message pushes carry a `notification` block, so Android draws the tray
+notification itself. Call pushes are **data-only**: the app's FCM background
+handler raises the native CallKit screen, which is the only way a call can ring
+and be answered while the app is closed. They also expire after 45 s, matching
+the server's ring window.
+
+Because a minute of cron delay would eat most of that window, self-hosted
+instances that run their own timer should dispatch more often. This instance
+uses a systemd timer at 10 s:
+
+```ini
+# /etc/systemd/system/adoetz-push-dispatch.service
+[Unit]
+Description=Adoetz Chat push dispatch
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/adoetz-push-dispatch
+TimeoutStartSec=60
+```
+
+```ini
+# /etc/systemd/system/adoetz-push-dispatch.timer
+[Unit]
+Description=Run the Adoetz Chat push dispatcher every 10 seconds
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=10s
+AccuracySec=1s
+Unit=adoetz-push-dispatch.service
+
+[Install]
+WantedBy=timers.target
+```
+
+`adoetz-push-dispatch` is a two-line script that reads `PUSH_DISPATCH_SECRET`
+from the instance `.env` and POSTs to `http://127.0.0.1:8000/functions/v1/adoetz-push`.
+Enable it with `systemctl enable --now adoetz-push-dispatch.timer`.
 
 ## 7. First admin
 

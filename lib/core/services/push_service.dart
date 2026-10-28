@@ -8,12 +8,37 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../storage/secure_store.dart';
+import 'callkit_service.dart';
 
 @pragma('vm:entry-point')
 Future<void> firebaseBackgroundHandler(RemoteMessage message) async {
   try {
     await Firebase.initializeApp();
   } catch (_) {}
+
+  // Calls are pushed data-only so this isolate can raise the native ringing
+  // screen. Without that the phone would only show a silent banner and the
+  // call would be gone before the user could answer it.
+  if (message.data['type'] == 'call') {
+    final callId = message.data['call_id'] as String?;
+    if (callId != null) {
+      try {
+        await CallkitService.showIncoming(
+          callId: callId,
+          callerName:
+              (message.data['initiator_name'] as String?) ?? 'Panggilan masuk',
+          video: message.data['kind'] == 'video',
+        );
+        return;
+      } catch (error) {
+        debugPrint('CallKit unavailable, falling back to a notification: $error');
+      }
+    }
+  }
+
+  // A message push carries a notification block; Android renders it in the
+  // tray by itself, so posting a local one here would duplicate it.
+  if (message.notification != null) return;
   await PushService.showBackgroundNotification(message);
 }
 
@@ -31,12 +56,29 @@ class PushService {
 
   bool _available = false;
   String? _token;
+  CallkitService? _callkit;
+  PushRoute? _initialRoute;
   StreamSubscription<RemoteMessage>? _foregroundSub;
   StreamSubscription<RemoteMessage>? _openedSub;
   StreamSubscription<String>? _tokenSub;
 
   Stream<PushRoute> get routes => _routes.stream;
   bool get available => _available;
+
+  /// Calls the user answered on the native CallKit screen.
+  Stream<String> get acceptedCalls =>
+      _callkit?.accepted ?? const Stream<String>.empty();
+
+  /// Answers that landed before the UI could listen (cold start).
+  String? takePendingAcceptedCall() => _callkit?.takePending();
+
+  /// The push that launched a terminated app, kept until the home screen is
+  /// ready to navigate: a broadcast stream drops anything emitted earlier.
+  PushRoute? takeInitialRoute() {
+    final route = _initialRoute;
+    _initialRoute = null;
+    return route;
+  }
 
   static const _messagesChannel = AndroidNotificationChannel(
     'messages',
@@ -84,6 +126,13 @@ class PushService {
 
     if (!_available) return;
 
+    _callkit = CallkitService(client: _client);
+    try {
+      await _callkit!.start();
+    } catch (error) {
+      debugPrint('CallKit unavailable: $error');
+    }
+
     FirebaseMessaging.onBackgroundMessage(firebaseBackgroundHandler);
     _foregroundSub = FirebaseMessaging.onMessage.listen(_onForeground);
     _openedSub = FirebaseMessaging.onMessageOpenedApp.listen((message) {
@@ -97,8 +146,7 @@ class PushService {
 
     final initial = await FirebaseMessaging.instance.getInitialMessage();
     if (initial != null) {
-      final route = PushRoute.fromData(initial.data);
-      if (route != null) _routes.add(route);
+      _initialRoute = PushRoute.fromData(initial.data);
     }
   }
 
@@ -155,6 +203,9 @@ class PushService {
   Future<void> _onForeground(RemoteMessage message) async {
     final route = PushRoute.fromData(message.data);
     if (route == null) return;
+    // While the app is open the incoming-call card already owns the screen;
+    // a tray banner on top of it would just ring twice.
+    if (route.kind == PushRouteKind.call) return;
     final notification = message.notification;
     await _local.show(
       route.hashCode,
@@ -219,6 +270,7 @@ class PushService {
     await _foregroundSub?.cancel();
     await _openedSub?.cancel();
     await _tokenSub?.cancel();
+    await _callkit?.dispose();
     await _routes.close();
   }
 }

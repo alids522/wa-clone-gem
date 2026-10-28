@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
@@ -5,6 +7,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../../app/providers.dart';
 import '../../app/theme/app_tokens.dart';
 import '../../core/services/call_repository.dart';
+import '../../core/services/callkit_service.dart';
 import '../../core/ui/avatar_view.dart';
 import '../../core/utils/formatters.dart';
 import 'call_session.dart';
@@ -66,6 +69,8 @@ class _ActiveCallScreenState extends ConsumerState<ActiveCallScreen> {
   void dispose() {
     _session.removeListener(_onSessionChanged);
     _session.dispose();
+    // Remove the native ringing/ongoing call after the in-app call ends.
+    unawaited(CallkitService.end(widget.call.id));
     super.dispose();
   }
 

@@ -85,6 +85,7 @@ Deno.serve(async (req) => {
     }
 
     let sent = 0;
+    let unregistered = 0;
     let lastError = '';
     for (const row of tokens) {
       try {
@@ -95,6 +96,7 @@ Deno.serve(async (req) => {
         }
         lastError = `${result.status} ${result.detail}`.slice(0, 500);
         if (result.unregistered) {
+          unregistered += 1;
           await admin
             .from('push_tokens')
             .update({ revoked_at: new Date().toISOString() })
@@ -111,6 +113,10 @@ Deno.serve(async (req) => {
 
     if (sent > 0) {
       await finish('sent');
+    } else if (unregistered === tokens.length) {
+      // Every device FCM knows about is gone; retrying cannot ever succeed and
+      // would keep dead jobs in the queue for five minutes.
+      await finish('dead', lastError || 'all push tokens unregistered');
     } else if (job.retry_count + 1 >= MAX_ATTEMPTS) {
       await finish('dead', lastError);
     } else {
@@ -151,14 +157,22 @@ async function buildMessage(
   const title = await displayName(admin, typeof actorId === 'string' ? actorId : null);
 
   if (job.event_type === 'call') {
+    const kind = String(job.payload.kind ?? 'audio');
+    // Data-only: the app's background handler raises the native CallKit
+    // screen, which is the only thing that can ring and be answered while the
+    // app is closed. A `notification` block would just draw a silent tray row.
     return {
       title,
       body: 'Panggilan masuk',
       highPriority: true,
+      dataOnly: true,
+      ttlSeconds: 45,
       data: {
         type: 'call',
         call_id: String(job.payload.call_id ?? ''),
-        kind: String(job.payload.kind ?? 'audio'),
+        kind,
+        initiator_name: title,
+        initiator_id: String(job.payload.initiator_id ?? ''),
       },
     };
   }

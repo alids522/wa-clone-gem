@@ -108,6 +108,14 @@ export interface PushMessage {
   data: Record<string, string>;
   /** Ringing calls must wake the device immediately. */
   highPriority?: boolean;
+  /**
+   * Send without a `notification` block so Android hands the payload to the
+   * app's background handler instead of drawing a tray notification. Used for
+   * calls, where the app raises the native CallKit screen itself.
+   */
+  dataOnly?: boolean;
+  /** How long FCM may keep trying to deliver, in seconds. */
+  ttlSeconds?: number;
 }
 
 export interface PushResult {
@@ -120,6 +128,18 @@ export interface PushResult {
 
 export async function sendPush(sa: ServiceAccount, message: PushMessage): Promise<PushResult> {
   const token = await accessToken(sa);
+  const android: Record<string, unknown> = {
+    priority: message.highPriority ? 'high' : 'normal',
+  };
+  if (message.ttlSeconds) android.ttl = `${message.ttlSeconds}s`;
+  if (!message.dataOnly) {
+    android.notification = {
+      // Must match the channels created in lib/core/services/push_service.dart.
+      channel_id: message.highPriority ? 'calls' : 'messages',
+      sound: 'default',
+      default_vibrate_timings: true,
+    };
+  }
   const response = await fetch(
     `https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`,
     {
@@ -131,17 +151,11 @@ export async function sendPush(sa: ServiceAccount, message: PushMessage): Promis
       body: JSON.stringify({
         message: {
           token: message.token,
-          notification: { title: message.title, body: message.body },
+          ...(message.dataOnly
+            ? {}
+            : { notification: { title: message.title, body: message.body } }),
           data: message.data,
-          android: {
-            priority: message.highPriority ? 'high' : 'normal',
-            notification: {
-              // Must match the channels created in lib/core/services/push_service.dart.
-              channel_id: message.highPriority ? 'calls' : 'messages',
-              sound: 'default',
-              default_vibrate_timings: true,
-            },
-          },
+          android,
         },
       }),
     },

@@ -6,14 +6,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/adoetz_app.dart';
 import '../../app/providers.dart';
-import '../../app/theme/app_tokens.dart';
 import '../../core/models/conversation.dart';
 import '../../core/services/call_repository.dart';
+import '../../core/services/callkit_service.dart';
 import '../../core/services/realtime_service.dart';
 import '../../core/ui/app_widgets.dart';
-import '../../core/ui/avatar_view.dart';
 import '../../core/utils/app_error.dart';
 import 'active_call_screen.dart';
+import 'incoming_call_card.dart';
 
 /// Watches durable `calls` changes and offers an in-app incoming-call UI.
 ///
@@ -31,6 +31,7 @@ class IncomingCallOverlay extends ConsumerStatefulWidget {
 
 class _IncomingCallOverlayState extends ConsumerState<IncomingCallOverlay> {
   StreamSubscription<RealtimeEvent>? _subscription;
+  StreamSubscription<String>? _acceptedSub;
   CallRecord? _incoming;
   PeerProfile? _peer;
   bool _busy = false;
@@ -40,14 +41,66 @@ class _IncomingCallOverlayState extends ConsumerState<IncomingCallOverlay> {
   @override
   void initState() {
     super.initState();
-    _subscription = ref.read(depsProvider).realtime.events.listen(_onEvent);
+    final deps = ref.read(depsProvider);
+    _subscription = deps.realtime.events.listen(_onEvent);
+    _acceptedSub = deps.push.acceptedCalls.listen(_joinAccepted);
+    // An accept can happen before this widget listens (the app may cold start
+    // straight into the answered call), so drain what the service buffered.
+    final pending = deps.push.takePendingAcceptedCall();
+    if (pending != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _joinAccepted(pending));
+    }
   }
 
   @override
   void dispose() {
     _expiry?.cancel();
     _subscription?.cancel();
+    _acceptedSub?.cancel();
     super.dispose();
+  }
+
+  /// Joins a call the user answered on the native CallKit screen.
+  Future<void> _joinAccepted(String callId) async {
+    if (_busy || _handled.contains(callId)) return;
+    final deps = ref.read(depsProvider);
+    final me = deps.client.auth.currentUser?.id;
+    if (me == null) return;
+    final record = await deps.calls.fetch(callId);
+    if (record == null || record.receiverId != me) return;
+    if (record.status != 'ringing' &&
+        record.status != 'connecting' &&
+        record.status != 'active') {
+      return;
+    }
+    _handled.add(callId);
+    _dismiss();
+    if (mounted) setState(() => _busy = true);
+    try {
+      final call = record.status == 'ringing'
+          ? await deps.calls.action(record.id, 'accept')
+          : record;
+      final peer = await deps.profiles.peerProfile(record.initiatorId);
+      final navigator = AdoetzApp.navigatorKey.currentState;
+      if (navigator == null) return;
+      await navigator.push(
+        MaterialPageRoute<void>(
+          builder: (_) => ActiveCallScreen(
+            call: call,
+            peerTitle: peer.title,
+            peerAvatarPath: peer.avatarPath,
+            outgoing: false,
+            video: call.kind == CallKind.video,
+          ),
+        ),
+      );
+    } catch (error) {
+      if (mounted) {
+        showAppSnack(context, mapError(error).message, error: true);
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   void _onEvent(RealtimeEvent event) {
@@ -115,6 +168,9 @@ class _IncomingCallOverlayState extends ConsumerState<IncomingCallOverlay> {
           .calls
           .action(record.id, 'accept');
       _dismiss(markHandled: true);
+      // If the native screen was ringing too, clear it now that this screen
+      // has taken over.
+      await CallkitService.end(record.id);
       final navigator = AdoetzApp.navigatorKey.currentState;
       if (navigator == null) return;
       final peer = _peer;
@@ -156,7 +212,7 @@ class _IncomingCallOverlayState extends ConsumerState<IncomingCallOverlay> {
       children: [
         widget.child,
         if (incoming != null)
-          _IncomingCallCard(
+          IncomingCallCard(
             record: incoming,
             peer: _peer,
             busy: _busy,
@@ -168,100 +224,3 @@ class _IncomingCallOverlayState extends ConsumerState<IncomingCallOverlay> {
   }
 }
 
-class _IncomingCallCard extends StatelessWidget {
-  const _IncomingCallCard({
-    required this.record,
-    required this.peer,
-    required this.busy,
-    required this.onAccept,
-    required this.onDecline,
-  });
-
-  final CallRecord record;
-  final PeerProfile? peer;
-  final bool busy;
-  final VoidCallback onAccept;
-  final VoidCallback onDecline;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = context.palette;
-    final text = Theme.of(context).textTheme;
-    final title = peer?.title ?? 'Panggilan masuk';
-    return Material(
-      color: Colors.black.withValues(alpha: 0.72),
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(AppTokens.space24),
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 380),
-            padding: const EdgeInsets.all(AppTokens.space24),
-            decoration: BoxDecoration(
-              color: p.bgSurface,
-              borderRadius: BorderRadius.circular(AppTokens.radiusDialog),
-              border: Border.all(color: p.border),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.35),
-                  blurRadius: 32,
-                  offset: const Offset(0, 12),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  record.kind == CallKind.video
-                      ? 'Panggilan video masuk'
-                      : 'Panggilan suara masuk',
-                  style: text.labelSmall?.copyWith(color: p.brandSoft),
-                ),
-                const SizedBox(height: AppTokens.space16),
-                AvatarView(name: title, path: peer?.avatarPath, size: 92),
-                const SizedBox(height: AppTokens.space16),
-                Text(
-                  title,
-                  style: text.titleMedium,
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                if (peer != null) ...[
-                  const SizedBox(height: 4),
-                  Text('@${peer!.username}', style: text.bodySmall),
-                ],
-                const SizedBox(height: AppTokens.space24),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: busy ? null : onDecline,
-                        icon: Icon(
-                          Icons.call_end_rounded,
-                          color: p.statusError,
-                        ),
-                        label: Text(
-                          'Tolak',
-                          style: TextStyle(color: p.statusError),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: AppTokens.space12),
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: busy ? null : onAccept,
-                        icon: const Icon(Icons.call_rounded),
-                        label: Text(busy ? 'Menyambung…' : 'Terima'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
