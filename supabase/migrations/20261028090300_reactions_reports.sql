@@ -33,6 +33,9 @@ create policy reactions_select on public.message_reactions
     )
   );
 -- No write policies: toggling goes through set_message_reaction().
+-- Realtime authorises each row read as `authenticated`, so the grant is needed
+-- even though the app only reads reactions through RPCs.
+grant select on public.message_reactions to authenticated;
 
 create or replace function public.set_message_reaction(
   p_message_id uuid,
