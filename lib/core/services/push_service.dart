@@ -31,7 +31,9 @@ Future<void> firebaseBackgroundHandler(RemoteMessage message) async {
         );
         return;
       } catch (error) {
-        debugPrint('CallKit unavailable, falling back to a notification: $error');
+        debugPrint(
+          'CallKit unavailable, falling back to a notification: $error',
+        );
       }
     }
   }

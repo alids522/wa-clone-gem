@@ -77,7 +77,10 @@ class IncomingCallCard extends StatelessWidget {
                     Expanded(
                       child: OutlinedButton.icon(
                         onPressed: busy ? null : onDecline,
-                        icon: Icon(Icons.call_end_rounded, color: p.statusError),
+                        icon: Icon(
+                          Icons.call_end_rounded,
+                          color: p.statusError,
+                        ),
                         label: Text(
                           'Tolak',
                           style: TextStyle(color: p.statusError),

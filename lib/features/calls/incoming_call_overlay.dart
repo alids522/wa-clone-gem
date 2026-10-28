@@ -48,7 +48,9 @@ class _IncomingCallOverlayState extends ConsumerState<IncomingCallOverlay> {
     // straight into the answered call), so drain what the service buffered.
     final pending = deps.push.takePendingAcceptedCall();
     if (pending != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _joinAccepted(pending));
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _joinAccepted(pending),
+      );
     }
   }
 
@@ -223,4 +225,3 @@ class _IncomingCallOverlayState extends ConsumerState<IncomingCallOverlay> {
     );
   }
 }
-
