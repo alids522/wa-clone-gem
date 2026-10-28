@@ -73,6 +73,17 @@ alter default privileges in schema "$schema" grant all on tables to service_role
 alter default privileges in schema "$schema" grant all on sequences to service_role;
 alter default privileges in schema "$schema" grant all on routines to service_role;
 
+-- On public, Supabase installs these DML grants for authenticated by default;
+-- a custom schema gets none, and the client writes some rows itself (profile,
+-- preferences, mute/pin, receipts). RLS stays the gate: tables without a policy
+-- for a command still deny it.
+grant select, insert, update, delete on all tables in schema "$schema" to authenticated;
+grant usage, select on all sequences in schema "$schema" to authenticated;
+alter default privileges in schema "$schema"
+  grant select, insert, update, delete on tables to authenticated;
+alter default privileges in schema "$schema"
+  grant usage, select on sequences to authenticated;
+
 -- auth.users is shared with the other application on this instance, so a global
 -- invite-only trigger there would break that app's own sign-ups. Registration
 -- stays invite-only on our side: the register function is the only path into
