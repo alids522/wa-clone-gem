@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../config/env.dart';
+
 enum RealtimeKind {
   messageCreated,
   messageUpdated,
@@ -44,35 +46,35 @@ class RealtimeService {
         .channel('adoetz:inbox')
         .onPostgresChanges(
           event: PostgresChangeEvent.insert,
-          schema: 'public',
+          schema: Env.dbSchema,
           table: 'messages',
           callback: (payload) =>
               _emit(RealtimeKind.messageCreated, payload.newRecord),
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.update,
-          schema: 'public',
+          schema: Env.dbSchema,
           table: 'messages',
           callback: (payload) =>
               _emit(RealtimeKind.messageUpdated, payload.newRecord),
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.insert,
-          schema: 'public',
+          schema: Env.dbSchema,
           table: 'message_receipts',
           callback: (payload) =>
               _emit(RealtimeKind.receiptCreated, payload.newRecord),
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
-          schema: 'public',
+          schema: Env.dbSchema,
           table: 'calls',
           callback: (payload) =>
               _emit(RealtimeKind.callChanged, payload.newRecord),
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
-          schema: 'public',
+          schema: Env.dbSchema,
           table: 'message_reactions',
           callback: (payload) =>
               _emit(RealtimeKind.reactionChanged, payload.newRecord),
