@@ -38,7 +38,7 @@ dependencies:
   # Media & files
   file_picker: ^8.1.7
   image_picker: ^1.1.2
-  record: ^5.2.1
+  record: ^7.1.2
   just_audio: ^0.9.46
   open_filex: ^4.7.0
   mime: ^2.0.0
