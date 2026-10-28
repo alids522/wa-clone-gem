@@ -200,6 +200,7 @@ The production instance (`supabase.adoetz52.my.id`) already hosts another app in
 |---|---|
 | Tables, RPCs | schema `waclonegem`, helpers in `waclonegem_private` |
 | PostgREST | `PGRST_DB_SCHEMAS` includes `waclonegem`; the app pins it with `PostgrestClientOptions(schema: Env.dbSchema)` |
+| Realtime | tables published on `supabase_realtime`; every `onPostgresChanges` subscription passes `schema: Env.dbSchema` — the argument does not follow the PostgREST client's schema |
 | Edge Functions | `adoetz-login`, `adoetz-register`, `adoetz-username`, `adoetz-push`, `adoetz-turn` |
 | Storage | `avatars`, `attachments` (global by nature, but policies are app-specific) |
 
